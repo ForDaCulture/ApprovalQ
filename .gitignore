@@ -1,0 +1,81 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log*
+firebase-debug.*.log*
+*.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Environment Variables and Sensitive Configurations
+# IMPORTANT: These files MUST NOT be committed to Git as they can contain
+# API keys, database credentials, and other sensitive information.
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.firebaserc.local # If you have a local override for .firebaserc
+.firebase/ # Firebase local cache and emulators data
+
+# Firebase Specific Configuration (Handle with Care)
+# .firebaserc: This file contains Firebase project aliases.
+# For a team working on the same Firebase project(s) with controlled access,
+# it is often committed so all members deploy to the same project(s).
+# If you prefer each developer to manually link their projects or manage
+# project selection outside Git, uncomment the line below:
+# .firebaserc
+# firebase.json # Generally committed, as it defines project structure and deploys.
+
+# Runtime data and Process IDs
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Build and Compilation Artifacts
+build/
+dist/
+out/
+.next/ # For Next.js projects, if ApprovalQ ever transitions to it
+coverage/ # Test coverage reports
+.nyc_output/ # nyc test coverage output
+lib-cov/ # Directory for instrumented libs by jscoverage/JSCover
+*.tgz # Output of 'npm pack'
+
+# Dependency Directories
+node_modules/ # Node.js dependencies
+bower_components/ # Bower dependency directory (if used)
+
+# Package Manager Specific Files
+.npm/ # Optional npm cache directory
+.yarn/ # Yarn cache directory
+.yarn-integrity # Yarn Integrity file
+
+# Editor and Tooling Specific Files
+.eslintcache # Optional eslint cache
+.node_repl_history # Optional Node.js REPL history
+.dataconnect # DataConnect generated files (if applicable, from prior context)
+.vscode/ # Visual Studio Code settings (user-specific)
+.idea/ # IntelliJ/WebStorm IDE settings (user-specific)
+
+# Security-related temporary files
+*.key # Private keys
+*.pem # Certificate files
+*.crt # Certificate files
+*.csr # Certificate signing requests
+*.pfx # Personal Information Exchange certificates
+*.jks # Java KeyStore files
+
+# OS-generated files
+.DS_Store # macOS directory settings
+Thumbs.db # Windows thumbnail cache
+desktop.ini # Windows folder customization
+node_modules

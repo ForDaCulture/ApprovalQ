@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    match /organizations/{orgId} {
+      allow read: if getUserData().orgId == orgId;
+      allow write: if false; // Lock down for now
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId ||
+                  (getUserData().role == 'Admin' && getUserData().orgId == resource.data.orgId);
+      allow write: if request.auth.uid == userId;
+    }
+
+    match /content/{contentId} {
+      // Allow read/write if the user belongs to the same organization as the content
+      allow read, write: if request.auth != null && getUserData().orgId == resource.data.orgId;
+    }
+  }
+}
