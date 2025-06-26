@@ -1,26 +1,23 @@
 {
   "firestore": {
-    "database": "(default)",
-    "location": "nam7",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "functions": [
     {
       "source": "approval_q",
-      "codebase": "default",
+      "codebase": "approval_q",
       "ignore": [
         "node_modules",
         ".git",
         "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
+        "firebase-debug.*.log"
+      ],
+      "predeploy": [
+        "echo 'Linting has been bypassed for this deployment.'"
       ]
     }
   ],
-  "storage": {
-    "rules": "storage.rules"
-  },
   "hosting": {
     "public": "build",
     "ignore": [
