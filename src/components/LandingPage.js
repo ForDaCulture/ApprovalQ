@@ -1,16 +1,16 @@
-// src/components/LandingPage.js
-import React from 'react';
+import React, { useContext } from 'react';
 import { motion } from 'framer-motion';
+import { AppContext } from '../context/AppContext';
+import { signInWithPopup, GoogleAuthProvider, signInAnonymously } from 'firebase/auth';
 
-const LandingPage = ({ handleLogin, handleTryAsGuest }) => {
+const LandingPage = () => {
+  const { auth, navigate } = useContext(AppContext);
 
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
+      transition: { staggerChildren: 0.1 },
     },
   };
 
@@ -19,11 +19,29 @@ const LandingPage = ({ handleLogin, handleTryAsGuest }) => {
     visible: {
       y: 0,
       opacity: 1,
-      transition: {
-        type: 'spring',
-        stiffness: 100,
-      },
+      transition: { type: 'spring', stiffness: 100 },
     },
+  };
+
+  const handleLogin = async (providerType) => {
+    try {
+      if (providerType === 'google') {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      }
+      navigate('/onboarding');
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  };
+
+  const handleTryAsGuest = async () => {
+    try {
+      await signInAnonymously(auth);
+      navigate('/onboarding');
+    } catch (error) {
+      console.error('Guest login error:', error);
+    }
   };
 
   return (
@@ -54,24 +72,30 @@ const LandingPage = ({ handleLogin, handleTryAsGuest }) => {
               Stop the chaos. Ship better work, faster. ApprovalQ combines AI-powered creation with structured approval workflows to eliminate bottlenecks.
             </p>
           </motion.div>
-          
+
           {/* CTA Box */}
           <motion.div
             className="md:col-span-1 p-8 rounded-2xl bg-black/20 backdrop-blur-lg border border-white/10 flex flex-col justify-center items-center space-y-4"
             variants={itemVariants}
           >
-            <button
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => handleLogin('google')}
-              className="w-full text-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+              className="w-full text-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Sign in with Google"
             >
               Get started with Google
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={handleTryAsGuest}
-              className="w-full text-center px-6 py-3 border border-white/20 text-base font-medium rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors"
+              className="w-full text-center px-6 py-3 border border-white/20 text-base font-medium rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Try as Guest"
             >
               Try as Guest
-            </button>
+            </motion.button>
           </motion.div>
 
           {/* Feature Box 1 */}

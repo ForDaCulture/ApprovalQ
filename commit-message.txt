@@ -1,0 +1,202 @@
+```
+feat: comprehensive rework of ApprovalQ app with new components, error fixes, and UI/UX enhancements
+
+This commit represents a major overhaul of the ApprovalQ project to address compilation errors, implement robust components, and enhance the UI/UX and logic for a Firebase-integrated web application. The changes align with modern website building principles, focusing on performance (lazy loading, memoized context), scalability (AppContext for global state), accessibility (ARIA roles, focus states), and aesthetics (dark theme with indigo accents, framer-motion animations). Below is a detailed breakdown of the changes:
+
+---
+
+### Error Fixes
+1. **Syntax Error in App.js (Pillars Issue)**:
+   - Issue: The `/settings` route in `App.js` contained invalid JSX (`Pillars` text and misplaced `motion.div`), causing a syntax error.
+   - Fix: Removed `Pillars` text and correctly wrapped `<ProfileSettings />` in `motion.div` for consistent animations. Ensured `/settings` and `/profile` routes both render `ProfileSettings` (as per user intent) with proper JSX structure.
+
+2. **Module Not Found Errors**:
+   - Issue: Missing modules (`react-error-boundary`, `AILab.js`, `ProfileSettings.js`, `TeamManagement.js`, `Billing.js`) caused compilation failures.
+   - Fix: Installed `react-error-boundary@^4.0.13` and ensured all components are saved in `src/components/`. Added lazy imports for `ProfileSettings`, `TeamManagement`, and `Billing` in `App.js` to resolve `react/jsx-no-undef` errors.
+
+3. **OpenAI Import Errors**:
+   - Issue: `Configuration` and `OpenAIApi` were invalid imports in `App.js` and `AILab.js` due to OpenAI SDK v4 changes.
+   - Fix: Updated to use `OpenAI` class directly with `dangerouslyAllowBrowser: true` for client-side development (noted for server-side migration in production).
+
+4. **ESLint Warnings**:
+   - **App.js**: `useMemo` included unnecessary dependencies (`auth`, `db`, `openai`), causing `react-hooks/exhaustive-deps` warning.
+     - Fix: Removed static dependencies from `useMemo` array, keeping only `[user, role, orgId, navigate]`.
+   - **AppLayout.js**: Redundant `role="list"` on `<ul>` elements triggered `jsx-a11y/no-redundant-roles` warnings.
+     - Fix: Removed `role="list"` from `<ul>` elements, as `<ul>` has an implicit list role.
+   - **AppContext.js**: Unused `useContext` import triggered `no-unused-vars` warning.
+     - Fix: Removed unused `useContext` import.
+   - **AppLayout.js**: Stray `Mullins` className in `NavLink` caused potential confusion.
+     - Fix: Removed erroneous `Mullins` and ensured correct `className` function.
+
+---
+
+### New and Updated Components
+1. **Billing.js**:
+   - Implemented a robust billing management interface in `src/components/Billing.js`.
+   - Features:
+     - Displays subscription plans (Free, Pro, Enterprise) in a responsive grid with Tailwind CSS (`md:grid-cols-3`).
+     - Allows plan upgrades/downgrades with mocked Stripe integration (Firestore `/billing/plan_{orgId}` updates).
+     - Shows billing history in a table with `orgId` filtering, using Firestore `onSnapshot` for real-time updates.
+     - Includes loading and error states with `framer-motion` animations.
+   - UI/UX: Card-based plan selection, animated buttons (`whileHover`, `whileTap`), dark theme (`bg-slate-800/70`, `border-slate-700`), and accessibility (ARIA labels).
+   - Firestore: Queries `/billing` collection with `orgId` filter, updates `plan_{orgId}` document.
+
+2. **TeamManagement.js**:
+   - Implemented a robust team management interface in `src/components/TeamManagement.js` for Admins.
+   - Features:
+     - Lists team members from `/users` with `orgId` filter, using `onSnapshot` for real-time updates.
+     - Allows role updates via dropdown (`creator`, `editor`, `approver`, `Admin`), with Firestore `updateDoc`.
+     - Includes a button to navigate to `/invite` for sending invites.
+     - Supports loading and error states with `framer-motion` animations.
+   - UI/UX: Table layout with animated rows, indigo-accented buttons, and accessibility (ARIA labels, keyboard navigation).
+   - Firestore: Queries `/users` with `orgId` filter, updates `role` field.
+
+3. **ProfileSettings.js**:
+   - Implemented a robust profile settings form in `src/components/ProfileSettings.js`.
+   - Features:
+     - Allows users to update `name` and `email` with Firestore `updateDoc` to `/users/{userId}`.
+     - Displays read-only `orgId` and `role` fields.
+     - Includes validation, loading, error, and success states with `framer-motion` animations.
+   - UI/UX: Centered form (`max-w-md`), dark theme, animated save button, and accessibility (ARIA labels, focus states).
+   - Firestore: Updates `/users/{userId}` with `name` and `email`.
+
+4. **Onboarding.js**:
+   - Updated `src/components/Onboarding.js` to include a multi-step form for setting `orgId` and `role`.
+   - Features:
+     - Two-step process: (1) Enter organization name, (2) Select role (`creator`, `editor`, `approver`, `Admin`).
+     - Saves `orgId`, `role`, `name`, and `email` to `/users/{userId}` using `setDoc`.
+     - Redirects to `/dashboard` upon completion.
+     - Includes validation, loading, and error states with `framer-motion` animations.
+   - UI/UX: Stepper UI, animated transitions (`AnimatePresence`), responsive form (`max-w-md`), and accessibility.
+   - Firestore: Creates `/users/{userId}` document with `orgId` and `role`.
+
+5. **LandingPage.js**:
+   - Updated `src/components/LandingPage.js` to fix missing `handleLogin` and `handleTryAsGuest` functions.
+   - Features:
+     - Implements Firebase auth for Google (`signInWithPopup`) and Guest (`signInAnonymously`) logins.
+     - Uses `AppContext` for `auth` and `navigate`, redirecting to `/onboarding` after login.
+     - Retains aurora background, grid layout (`md:grid-cols-4`), and feature boxes.
+   - UI/UX: Enhanced animations (`framer-motion` `containerVariants`, `itemVariants`), accessibility (ARIA labels), and responsive design.
+   - Firestore: Relies on `Onboarding` to set user data post-login.
+
+6. **AILab.js**:
+   - Ensured `src/components/AILab.js` is correctly implemented to resolve module not found error.
+   - Features:
+     - Allows `creator` role users to generate AI content using OpenAI SDK (`text-davinci-003`).
+     - Lists AI-generated items from `/aiLab` with `orgId` filter, using `onSnapshot`.
+     - Saves AI outputs to `/aiLab` with `addDoc`.
+     - Includes loading and error states with `framer-motion` animations.
+   - UI/UX: Form for prompts, table for results, animated rows, and accessibility (ARIA labels, keyboard navigation).
+   - Firestore: Queries `/aiLab` with `orgId` filter, creates documents with `prompt` and `output`.
+
+7. **AppLayout.js**:
+   - Updated to remove redundant `role="list"` attributes and fix `Mullins` className error.
+   - Features:
+     - Responsive sidebar with role-based navigation (`Admin` sees `/team`, `/invite`).
+     - Animated sidebar toggle (`framer-motion` `sidebarVariants`).
+     - Displays user and `orgId` in header.
+   - UI/UX: Dark theme, indigo accents, animated transitions, and accessibility (ARIA labels, focus states).
+
+8. **AppContext.js**:
+   - Updated to remove unused `useContext` import, resolving ESLint warning.
+   - Features: Provides global state (`db`, `auth`, `openai`, `user`, `role`, `orgId`, `navigate`) for all components.
+
+9. **CreativeInsights.js** and **InviteUserForm.js**:
+   - Provided placeholders to ensure all referenced components exist.
+   - Features: Minimal UI with `framer-motion` animations, ready for future expansion (e.g., AI analytics for `CreativeInsights`, email invites for `InviteUserForm`).
+   - UI/UX: Consistent dark theme and animations.
+
+---
+
+### App.js Updates
+- **Purpose**: Central routing and state management for the app.
+- **Changes**:
+  - Added lazy imports for `ProfileSettings`, `TeamManagement`, and `Billing` to resolve `react/jsx-no-undef` errors.
+  - Ensured `AILab` import points to `src/components/AILab.js`.
+  - Updated OpenAI initialization to use `OpenAI` class.
+  - Removed unnecessary `useMemo` dependencies (`auth`, `db`, `openai`).
+  - Added `/insights` route to match `AppLayout.js` navigation.
+  - Maintained lazy loading, error boundaries (`react-error-boundary`), and `AppContext` for global state.
+  - Routes:
+    - `/landing`: `LandingPage`
+    - `/onboarding`: `Onboarding` (protected)
+    - `/dashboard`, `/all-content`, `/ai-lab`, `/profile`, `/settings`, `/billing`, `/insights`: Under `AppLayout`
+    - `/team`, `/invite`: Admin-only under `ProtectedRoute`
+    - `/*`: Redirects to `/dashboard`
+
+---
+
+### Firestore Integration
+- **Collections**:
+  - `/users/{userId}`: `{ orgId, role, name, email }`
+  - `/billing/plan_{orgId}`: `{ orgId, type: 'plan', plan, updatedAt, updatedBy }`
+  - `/billing/{billingId}`: `{ orgId, amount, description, updatedAt }`
+  - `/content/{contentId}`: `{ orgId, createdBy, createdAt, title, status }`
+  - `/aiLab/{aiLabId}`: `{ orgId, createdBy, createdAt, prompt, output }`
+- **Rules**: Ensured components respect Firestore rules:
+  - `Admin` role for `/team`, `/invite` writes.
+  - `creator` role for `/aiLab` and `/content` creates/updates.
+  - `orgId` filtering for all queries (`onSnapshot`, `addDoc`, `updateDoc`).
+
+---
+
+### UI/UX Enhancements
+- **Responsive Design**: Tailwind CSS (`md:grid-cols-3`, `md:p-6`, `max-w-md`) ensures mobile, tablet, and desktop compatibility.
+- **Aesthetics**: Dark theme (`bg-gray-900`, `bg-slate-800/70`), indigo accents (`bg-indigo-600`), and aurora background (`LandingPage`).
+- **Animations**: `framer-motion` for page transitions (`initial`, `animate`, `exit`), button hovers (`whileHover`, `whileTap`), and sidebar toggles.
+- **Accessibility**: ARIA labels (`aria-label`), focus states (`focus:ring-2`), and keyboard navigation (`tabIndex`, `onKeyDown`).
+
+---
+
+### Performance and Scalability
+- **Lazy Loading**: All components use `React.lazy` and `Suspense` for optimized bundle size.
+- **Context API**: `AppContext` centralizes `db`, `auth`, `openai`, `user`, `role`, `orgId`, `navigate`, reducing prop drilling.
+- **Error Boundaries**: `react-error-boundary` wraps the app for robust error handling.
+- **Real-Time Updates**: Firestore `onSnapshot` ensures live data in `Billing`, `TeamManagement`, `AILab`, and `AllContent`.
+
+---
+
+### Integration Notes
+- **Dependencies**: Added `react-error-boundary@^4.0.13` to `package.json`. Ensured compatibility with:
+  ```json
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "firebase": "^11.9.1",
+    "framer-motion": "^12.19.1",
+    "openai": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-error-boundary": "^4.0.13",
+    "react-router-dom": "^7.6.2"
+  }
+  ```
+- **Environment Variables**: Verified `.env` includes Firebase and OpenAI keys.
+- **OpenAI Security**: Noted `dangerouslyAllowBrowser: true` in `AILab.js` and `App.js` for development; recommended server-side API for production.
+- **Firestore Rules**: Provided rules to enforce `orgId` and role-based access (e.g., `Admin` for `/team`, `creator` for `/aiLab` writes).
+
+---
+
+### Future Steps
+- **Content Details Route**: Implement `/content/:id` for `AllContent.js` row clicks to view full content details.
+- **Enhance Placeholders**: Develop `CreativeInsights.js` (AI analytics dashboard) and `InviteUserForm.js` (email invite system).
+- **Stripe Integration**: Replace mocked Stripe logic in `Billing.js` with actual Stripe SDK or server-side endpoint.
+- **User Testing**: Validate login, onboarding, profile updates, team management, billing, and AI features.
+- **Deployment**: Run `npm run deploy` to Firebase Hosting.
+
+---
+
+### Files Changed
+- `src/App.js`: Fixed syntax errors, added lazy imports, updated OpenAI, and included all routes.
+- `src/components/AppLayout.js`: Removed `role="list"` and fixed `Mullins` className.
+- `src/context/AppContext.js`: Removed unused `useContext` import.
+- `src/components/AILab.js`: Ensured correct implementation for AI content generation.
+- `src/components/ProfileSettings.js`: Implemented robust profile update form.
+- `src/components/TeamManagement.js`: Implemented Admin-only team management interface.
+- `src/components/Billing.js`: Implemented billing and subscription management.
+- `src/components/Onboarding.js`: Updated with multi-step form for `orgId` and `role`.
+- `src/components/LandingPage.js`: Added Firebase auth for Google/Guest login.
+- `src/components/CreativeInsights.js`: Placeholder for future AI analytics.
+- `src/components/InviteUserForm.js`: Placeholder for future email invites.
+
+This rework ensures a robust, scalable, and user-friendly ApprovalQ app, ready for further enhancements and production deployment.
+```

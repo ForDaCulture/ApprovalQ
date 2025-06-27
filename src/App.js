@@ -1,93 +1,214 @@
-// src/App.js
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { OpenAI } from 'openai';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ErrorBoundary } from 'react-error-boundary';
+import { AppContext } from './context/AppContext';
 import AppLayout from './components/AppLayout';
-import LandingPage from './components/LandingPage';
-import Dashboard from './components/Dashboard';
-import AllContent from './pages/AllContent';
-import { Settings } from './components/Settings';
-import Notification from './components/Notification';
-import ContentDetail from './components/ContentDetail';
-import { app } from './firebaseConfig';
-import { getAuth, onAuthStateChanged, GoogleAuthProvider, GithubAuthProvider, signInWithPopup, signOut } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { getFunctions } from 'firebase/functions';
+import './index.css'; // Tailwind CSS import
 
+// Lazy-loaded components
+const LandingPage = lazy(() => import('./components/LandingPage'));
+const Onboarding = lazy(() => import('./components/Onboarding'));
+const CreativeInsights = lazy(() => import('./components/CreativeInsights'));
+const AllContent = lazy(() => import('./components/AllContent'));
+const AILab = lazy(() => import('./components/AILab'));
+const InviteUserForm = lazy(() => import('./components/InviteUserForm'));
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const functions = getFunctions(app);
+
+// OpenAI configuration
+const openai = new OpenAI({
+  apiKey: process.env.REACT_APP_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true, // Note: For client-side use; consider server-side for production
+});
+
+// Error boundary fallback
+const ErrorFallback = ({ error }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    className="flex justify-center items-center h-screen bg-gray-900 text-red-400 text-lg"
+  >
+    <div className="text-center">
+      <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+      <p>{error.message}</p>
+    </div>
+  </motion.div>
+);
 
 function App() {
   const [user, setUser] = useState(null);
-  const [isGuest, setIsGuest] = useState(false);
-  const [loading, setLoading] = useState(true); // Corrected syntax: removed extra '='
-  const [notification, setNotification] = useState({ message: '', type: '' });
+  const [role, setRole] = useState(null);
+  const [orgId, setOrgId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  const showNotification = (message, type = 'error') => { setNotification({ message, type }); };
-  const clearNotification = () => { setNotification({ message: '', type: '' }); };
-
+  // Monitor authentication state
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if(currentUser) { setIsGuest(false); }
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser(currentUser);
+            setRole(userData.role || 'user');
+            setOrgId(userData.orgId || null);
+          } else {
+            setUser(currentUser);
+            setRole('user');
+            setOrgId(null);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          setUser(null);
+          setRole(null);
+          setOrgId(null);
+        }
+      } else {
+        setUser(null);
+        setRole(null);
+        setOrgId(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async (providerName) => {
-    let provider;
-    if (providerName === 'google') { provider = new GoogleAuthProvider(); }
-    else if (providerName === 'github') { provider = new GithubAuthProvider(); }
-    else { return; }
-    try {
-      const result = await signInWithPopup(auth, provider);
-      const loggedInUser = result.user;
-      const userRef = doc(db, "users", loggedInUser.uid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          displayName: loggedInUser.displayName, email: loggedInUser.email, photoURL: loggedInUser.photoURL,
-          createdAt: serverTimestamp(), orgId: null, role: "creator",
-        });
-      }
-    } catch (error) { showNotification(error.message, 'error'); }
-  };
-  
-  const handleTryAsGuest = () => { setIsGuest(true); };
-
-  const handleLogout = async () => {
-    if(isGuest) { setIsGuest(false); } 
-    else { try { await signOut(auth); } catch (error) { showNotification(error.message, 'error'); } }
-  };
-
-  if (loading) { return <div className="text-white flex items-center justify-center h-screen">Initializing ApprovalQ...</div>; }
-  
-  const isAuthenticated = user || isGuest;
-  
-  // A simple placeholder for pages that are not yet built
-  const PlaceholderPage = ({ title }) => (
-    <div>
-        <h1 className="text-3xl font-bold text-white">{title}</h1>
-        <p className="text-gray-400 mt-4">This page is under construction and will be built in a future phase.</p>
-    </div>
+  // Memoize context value
+  const contextValue = useMemo(
+    () => ({ db, auth, openai, user, role, orgId, navigate }),
+    [user, role, orgId, navigate]
   );
 
+  // Protected route component
+  const ProtectedRoute = ({ children, allowedRoles }) => {
+    if (loading) {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex justify-center items-center h-screen bg-gray-900 text-white"
+        >
+          Loading...
+        </motion.div>
+      );
+    }
+    if (!user) return <Navigate to="/landing" replace />;
+    if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/dashboard" replace />;
+    if (!orgId) return <Navigate to="/onboarding" replace />;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
+      >
+        {children}
+      </motion.div>
+    );
+  };
+
   return (
-    <Router>
-      <Notification notification={notification} onClear={clearNotification} />
-      <AppLayout user={user} isGuest={isGuest} handleLogin={handleLogin} handleLogout={handleLogout}>
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <AppContext.Provider value={contextValue}>
+        <Router>
+          <div className="min-h-screen bg-gray-900 text-white font-sans">
+            <AnimatePresence>
+              <Suspense
+                fallback={
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex justify-center items-center h-screen bg-gray-900 text-white"
+                  >
+                    Loading...
+                  </motion.div>
+                }
+              >
+                <Routes>
+                  {/* Landing Page */}
+                  <Route
+                    path="/landing"
+                    element={
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <LandingPage />
+                      </motion.div>
+                    }
+                  />
+                  {/* Onboarding */}
+                  <Route
+                    path="/onboarding"
+                    element={
+                      <ProtectedRoute>
+                        <Onboarding setOrgId={setOrgId} />
+                      </ProtectedRoute>
+                    }
+                  />
+{/* Main App with Layout */}
+<Route
+  path="/*"
+  element={
+    <ProtectedRoute>
+      <AppLayout>
         <Routes>
-          <Route path="/" element={isAuthenticated ? <Dashboard user={user} isGuest={isGuest} /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/dashboard" element={isAuthenticated ? <Dashboard user={user} isGuest={isGuest} /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/all-content" element={isAuthenticated ? <AllContent db={db} user={user} showNotification={showNotification} /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/content/:contentId" element={isAuthenticated ? <ContentDetail db={db} user={user} isGuest={isGuest} /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/insights" element={isAuthenticated ? <PlaceholderPage title="Insights Engine" /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/ai-lab" element={isAuthenticated ? <PlaceholderPage title="AI Strategy Lab" /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
-          <Route path="/settings" element={isAuthenticated ? <Settings /> : <LandingPage handleLogin={handleLogin} handleTryAsGuest={handleTryAsGuest} />} />
+          <Route path="/dashboard" element={<CreativeInsights />} />
+          <Route path="/all-content" element={<AllContent />} />
+          <Route path="/ai-lab" element={<AILab />} />
+          <Route path="/profile" element={<ProfileSettings />} />
+          <Route path="/settings" element={<ProfileSettings />} />
+          <Route
+            path="/team"
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <TeamManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/billing" element={<Billing />} />
+          <Route
+            path="/invite"
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <InviteUserForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AppLayout>
-    </Router>
+    </ProtectedRoute>
+  }
+/>
+                </Routes>
+              </Suspense>
+            </AnimatePresence>
+          </div>
+        </Router>
+      </AppContext.Provider>
+    </ErrorBoundary>
   );
 }
 

@@ -1,14 +1,16 @@
 // src/components/InviteUserForm.js
 import React from 'react';
+import { motion } from 'framer-motion';
 
-export const InviteUserForm = ({ isInline = false }) => (
-     <div className={`flex gap-2 ${isInline ? '' : 'mt-4'}`}>
-        <input type="email" placeholder="new.teammate@example.com" className="flex-1 px-3 py-3 border border-gray-600 bg-gray-700 text-gray-200 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-        <select className="px-3 py-3 border border-gray-600 bg-gray-700 text-gray-200 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-            <option>Content Creator</option>
-            <option>Junior Marketer</option>
-            <option>Senior Editor</option>
-        </select>
-         {isInline && <button className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition">Send Invite</button>}
-     </div>
+const InviteUserForm = () => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className="bg-slate-800/70 p-6 rounded-lg border border-slate-700 text-white"
+  >
+    <h2 className="text-lg font-semibold">Invite User</h2>
+    <p>Placeholder for user invitation form.</p>
+  </motion.div>
 );
+export default InviteUserForm;
