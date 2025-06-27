@@ -2,24 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper function to get user data safely
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    // Validate user is authenticated and data exists
+    function isAuthenticated() {
+      return request.auth != null && getUserData() != null;
+    }
+
+    // Check if user has a specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    // Organization-level rules
     match /organizations/{orgId} {
-      allow read: if getUserData().orgId == orgId;
-      allow write: if false; // Lock down for now
+      allow read: if isAuthenticated() && getUserData().orgId == orgId;
+      allow write: if hasRole('Admin') && getUserData().orgId == orgId; // Only admins can modify org data
     }
 
+    // User management rules
     match /users/{userId} {
-      allow read: if request.auth.uid == userId ||
-                  (getUserData().role == 'Admin' && getUserData().orgId == resource.data.orgId);
-      allow write: if request.auth.uid == userId;
+      allow read: if request.auth.uid == userId || hasRole('Admin');
+      allow write: if request.auth.uid == userId; // Users can only update their own profiles
+      allow delete: if false; // Prevent deletion for now
     }
 
+    // Content management rules with role-based approval flow
     match /content/{contentId} {
-      // Allow read/write if the user belongs to the same organization as the content
-      allow read, write: if request.auth != null && getUserData().orgId == resource.data.orgId;
+      allow read: if isAuthenticated() && getUserData().orgId == resource.data.orgId;
+      allow create: if isAuthenticated() && hasRole('creator') && getUserData().orgId == resource.data.orgId;
+      allow update: if isAuthenticated() && (
+        hasRole('creator') && request.auth.uid == resource.data.createdBy ||
+        hasRole('editor') ||
+        hasRole('approver')
+      ) && getUserData().orgId == resource.data.orgId;
+      allow delete: if hasRole('Admin') && getUserData().orgId == resource.data.orgId;
+    }
+
+    // AI Lab data (e.g., generated drafts or summaries)
+    match /aiLab/{aiLabId} {
+      allow read: if isAuthenticated() && getUserData().orgId == resource.data.orgId;
+      allow create, update: if isAuthenticated() && hasRole('creator') && getUserData().orgId == resource.data.orgId;
+      allow delete: if hasRole('Admin') && getUserData().orgId == resource.data.orgId;
+    }
+
+    // Activity logs for real-time updates
+    match /activity/{activityId} {
+      allow read: if isAuthenticated() && getUserData().orgId == resource.data.orgId;
+      allow create: if isAuthenticated() && getUserData().orgId == resource.data.orgId;
+      allow write, delete: if false; // Logs are immutable once created
     }
   }
 }

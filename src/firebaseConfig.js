@@ -1,4 +1,9 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// src/firebaseConfig.js
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+
 const firebaseConfig = {
   apiKey: "AIzaSyDiKeEHttNKh6Vibhf_N4hg_Cv7EZngYGA",
   authDomain: "approvalq-1126b.firebaseapp.com",
@@ -8,3 +13,13 @@ const firebaseConfig = {
   appId: "1:152433873633:web:1b431daa3ab2c423c4dda0",
   measurementId: "G-H2WRB9QZ1B"
 };
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialize and export additional services
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
+// Export the initialized app for other uses
+export { app };

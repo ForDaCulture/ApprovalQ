@@ -1,43 +1,35 @@
-// Corrected to properly use the 'navigate' function from context
+// src/components/AppLayout.js
+import React from 'react';
+import Header from './Header';
+import Sidebar from './Sidebar';
 
-import React, { useState, useContext } from 'react';
-import { AppContext } from '../context/AppContext';
-import { Header } from './Header';
-import { Sidebar } from './Sidebar';
-import { Dashboard } from './Dashboard';
-import { AllContent } from './AllContent';
-import { CreativeInsights } from './CreativeInsights';
-import { Settings } from './Settings';
+const AppLayout = ({ children, user, isGuest, handleLogout }) => {
+  const isAuthenticated = user || isGuest;
 
-const ContentCreator = () => <div>Create Content Form</div>;
+  // If not authenticated, we only render the children (e.g., the full-page LandingPage)
+  if (!isAuthenticated) {
+    return <main>{children}</main>;
+  }
 
-export const AppLayout = () => {
-    const { user, handleLogout, appView, navigate } = useContext(AppContext);
-    
-    if (!user) {
-        return <div className="bg-slate-900 h-screen w-screen flex items-center justify-center text-white">Authenticating...</div>;
-    }
+  // If authenticated, we render the full SaaS application shell
+  return (
+    <div className="min-h-screen w-full bg-gray-950 text-white font-sans">
+      {/* Static sidebar for desktop */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+        <Sidebar />
+      </div>
 
-    const renderView = () => {
-        switch(appView) {
-            case 'dashboard': return <Dashboard />;
-            case 'all-content': return <AllContent />;
-            case 'insights': return <CreativeInsights />;
-            case 'settings': return <Settings />;
-            case 'create': return <ContentCreator />;
-            default: return <Dashboard />;
-        }
-    }
-    
-    return (
-        <div className="flex h-screen bg-gray-900 text-white">
-            <Sidebar currentView={appView} setView={navigate} />
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <Header user={user} onLogout={handleLogout} view={appView} />
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-800 p-8">
-                    {renderView()}
-                </main>
-            </div>
-        </div>
-    );
+      {/* Main content area, correctly positioned to the right of the sidebar */}
+      <div className="lg:pl-72">
+        {/* The header is now the top bar of the main content area */}
+        <Header user={user} isGuest={isGuest} handleLogout={handleLogout} />
+        
+        <main className="py-10">
+          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
 };
+
+export default AppLayout;
