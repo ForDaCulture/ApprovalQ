@@ -10,13 +10,17 @@ import { AppContext } from './context/AppContext';
 import AppLayout from './components/AppLayout';
 import './index.css'; // Tailwind CSS import
 
-// Lazy-loaded components
+// --- FIX 1: Lazy-loaded components ---
+// Added imports for ProfileSettings, TeamManagement, and Billing to resolve 'not defined' errors.
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
 const CreativeInsights = lazy(() => import('./components/CreativeInsights'));
 const AllContent = lazy(() => import('./components/AllContent'));
 const AILab = lazy(() => import('./components/AILab'));
 const InviteUserForm = lazy(() => import('./components/InviteUserForm'));
+const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
+const TeamManagement = lazy(() => import('./components/TeamManagement'));
+const Billing = lazy(() => import('./components/Billing'));
 
 // Firebase configuration
 const firebaseConfig = {
@@ -53,7 +57,10 @@ const ErrorFallback = ({ error }) => (
   </motion.div>
 );
 
-function App() {
+// --- FIX 2: App Content Component ---
+// All state, hooks, and routing logic have been moved into this new component.
+// This ensures that `useNavigate` is called within a component that is a child of `<Router>`, fixing a critical hook error.
+function AppContent() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [orgId, setOrgId] = useState(null);
@@ -72,8 +79,9 @@ function App() {
             setRole(userData.role || 'user');
             setOrgId(userData.orgId || null);
           } else {
+            // New user, not yet onboarded
             setUser(currentUser);
-            setRole('user');
+            setRole('user'); // Default role
             setOrgId(null);
           }
         } catch (error) {
@@ -112,8 +120,9 @@ function App() {
       );
     }
     if (!user) return <Navigate to="/landing" replace />;
+    if (!orgId && window.location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
     if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/dashboard" replace />;
-    if (!orgId) return <Navigate to="/onboarding" replace />;
+    
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -127,87 +136,101 @@ function App() {
   };
 
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <AppContext.Provider value={contextValue}>
-        <Router>
-          <div className="min-h-screen bg-gray-900 text-white font-sans">
-            <AnimatePresence>
-              <Suspense
-                fallback={
+    <AppContext.Provider value={contextValue}>
+      <div className="min-h-screen bg-gray-900 text-white font-sans">
+        <AnimatePresence mode="wait">
+          <Suspense
+            fallback={
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex justify-center items-center h-screen bg-gray-900 text-white"
+              >
+                Loading...
+              </motion.div>
+            }
+          >
+            <Routes>
+              {/* --- FIX: Added root path redirect --- */}
+              {/* This ensures visiting the base URL always shows the landing page first. */}
+              <Route path="/" element={<Navigate to="/landing" replace />} />
+
+              {/* Landing Page */}
+              <Route
+                path="/landing"
+                element={
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex justify-center items-center h-screen bg-gray-900 text-white"
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
                   >
-                    Loading...
+                    <LandingPage />
                   </motion.div>
                 }
-              >
-                <Routes>
-                  {/* Landing Page */}
-                  <Route
-                    path="/landing"
-                    element={
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.5 }}
-                      >
-                        <LandingPage />
-                      </motion.div>
-                    }
-                  />
-                  {/* Onboarding */}
-                  <Route
-                    path="/onboarding"
-                    element={
-                      <ProtectedRoute>
-                        <Onboarding setOrgId={setOrgId} />
-                      </ProtectedRoute>
-                    }
-                  />
-{/* Main App with Layout */}
-<Route
-  path="/*"
-  element={
-    <ProtectedRoute>
-      <AppLayout>
-        <Routes>
-          <Route path="/dashboard" element={<CreativeInsights />} />
-          <Route path="/all-content" element={<AllContent />} />
-          <Route path="/ai-lab" element={<AILab />} />
-          <Route path="/profile" element={<ProfileSettings />} />
-          <Route path="/settings" element={<ProfileSettings />} />
-          <Route
-            path="/team"
-            element={
-              <ProtectedRoute allowedRoles={['Admin']}>
-                <TeamManagement />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/billing" element={<Billing />} />
-          <Route
-            path="/invite"
-            element={
-              <ProtectedRoute allowedRoles={['Admin']}>
-                <InviteUserForm />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </AppLayout>
-    </ProtectedRoute>
-  }
-/>
-                </Routes>
-              </Suspense>
-            </AnimatePresence>
-          </div>
-        </Router>
-      </AppContext.Provider>
+              />
+              {/* Onboarding */}
+              <Route
+                path="/onboarding"
+                element={
+                  user ? <Onboarding setOrgId={setOrgId} /> : <Navigate to="/landing" replace />
+                }
+              />
+              {/* Main App with Layout */}
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Routes>
+                        <Route path="/dashboard" element={<CreativeInsights />} />
+                        <Route path="/all-content" element={<AllContent />} />
+                        <Route path="/ai-lab" element={<AILab />} />
+                        <Route path="/profile" element={<ProfileSettings />} />
+                        <Route path="/settings" element={<ProfileSettings />} />
+                        <Route
+                          path="/team"
+                          element={
+                            <ProtectedRoute allowedRoles={['Admin']}>
+                              <TeamManagement />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="/billing" element={
+                            <ProtectedRoute allowedRoles={['Admin']}>
+                                <Billing />
+                            </ProtectedRoute>
+                        } />
+                        <Route
+                          path="/invite"
+                          element={
+                            <ProtectedRoute allowedRoles={['Admin']}>
+                              <InviteUserForm />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                      </Routes>
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Suspense>
+        </AnimatePresence>
+      </div>
+    </AppContext.Provider>
+  );
+}
+
+
+// The main App component now wraps the app in the Router and ErrorBoundary.
+function App() {
+  return (
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <Router>
+        <AppContent />
+      </Router>
     </ErrorBoundary>
   );
 }

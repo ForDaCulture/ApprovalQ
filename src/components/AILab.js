@@ -1,185 +1,147 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
-import { OpenAI } from 'openai';
+import React, { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
-import { BeakerIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { SparklesIcon, PaperAirplaneIcon, LockClosedIcon } from '@heroicons/react/24/solid';
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.REACT_APP_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true, // Note: For client-side use; consider server-side for production
-});
+const AILab = () => {
+    // Get all necessary data and functions from the global context
+    const { db, openai, user, orgId, role, navigate } = useContext(AppContext);
+    
+    const [prompt, setPrompt] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-export const AILab = () => {
-  const { db, user, orgId, role } = useContext(AppContext);
-  const [aiItems, setAiItems] = useState([]);
-  const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [error, setError] = useState(null);
+    // BEST OF BOTH: Incorporate role-based access control.
+    // Only 'Admin' and 'Creator' roles can generate content.
+    const canGenerate = role === 'Admin' || role === 'Creator';
 
-  // Fetch AI Lab items from Firestore
-  useEffect(() => {
-    if (!db || !orgId) {
-      setError('Database or organization ID not available');
-      setLoading(false);
-      return;
-    }
+    const handleGenerateContent = async (e) => {
+        e.preventDefault();
+        if (!canGenerate) {
+            setError('You do not have permission to generate content.');
+            return;
+        }
+        if (!prompt.trim()) {
+            setError('Please enter a prompt to generate content.');
+            return;
+        }
+        if (!openai) {
+            setError('OpenAI service is not available. Please check your API key.');
+            return;
+        }
 
-    const q = query(collection(db, 'aiLab'), where('orgId', '==', orgId));
-    const unsubscribe = onSnapshot(
-      q,
-      (querySnapshot) => {
-        const items = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        setAiItems(items);
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Firestore error:', err);
-        setError('Failed to load AI Lab data');
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, [db, orgId]);
+        setLoading(true);
+        setError('');
 
-  // Handle AI prompt submission
-  const handleGenerate = async (e) => {
-    e.preventDefault();
-    if (!prompt.trim() || role !== 'creator') return;
+        try {
+            // BEST OF BOTH: Use the modern, more efficient chat completions API.
+            const completion = await openai.chat.completions.create({
+                model: 'gpt-3.5-turbo',
+                messages: [
+                    { role: 'system', content: 'You are a helpful assistant that writes concise and professional blog posts.' },
+                    { role: 'user', content: `Write a blog post about: ${prompt}` }
+                ],
+            });
 
-    setAiLoading(true);
-    try {
-      const response = await openai.completions.create({
-        model: 'text-davinci-003',
-        prompt: `Generate a concise content draft or summary based on: ${prompt}`,
-        max_tokens: 500,
-        temperature: 0.7,
-      });
-      const generatedText = response.choices[0].text.trim();
+            const generatedContent = completion.choices[0]?.message?.content;
+            if (!generatedContent) {
+                throw new Error('AI failed to generate content.');
+            }
 
-      // Save to Firestore
-      await addDoc(collection(db, 'aiLab'), {
-        orgId,
-        createdBy: { uid: user.uid, name: user.displayName || 'Unknown' },
-        createdAt: new Date(),
-        prompt,
-        output: generatedText,
-      });
-      setPrompt('');
-    } catch (err) {
-      console.error('OpenAI error:', err);
-      setError('Failed to generate AI content');
-    } finally {
-      setAiLoading(false);
-    }
-  };
+            // BEST OF BOTH: Save the new draft directly to the main 'content' collection.
+            // This integrates it into the primary workflow immediately.
+            const contentCollection = collection(db, 'content');
+            await addDoc(contentCollection, {
+                title: prompt.substring(0, 60), // Use a truncated prompt as the title
+                content: generatedContent,
+                orgId: orgId,
+                createdBy: {
+                    userId: user.uid,
+                    name: user.displayName || 'Unknown User',
+                },
+                createdAt: serverTimestamp(),
+                status: 'Pending', // All new AI content starts as 'Pending'
+            });
 
-  if (loading) {
+            // BEST OF BOTH: Navigate to the 'All Content' page to show the user their new draft.
+            // This page acts as the "history" of all content, including AI-generated items.
+            navigate('/all-content');
+
+        } catch (err) {
+            console.error('AI Lab Error:', err);
+            setError(err.message || 'An unexpected error occurred. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex justify-center items-center h-full text-white text-lg"
-      >
-        Loading AI Lab...
-      </motion.div>
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="max-w-4xl mx-auto p-4 md:p-6"
+        >
+            <div className="flex flex-col items-center text-center mb-8">
+                <SparklesIcon className="h-16 w-16 text-indigo-400 mb-4" />
+                <h1 className="text-4xl font-bold text-white">AI Content Lab</h1>
+                <p className="text-slate-400 mt-2 max-w-2xl">
+                    Describe the content you want to create. Our AI will generate a draft, which you can then review and edit.
+                </p>
+            </div>
+
+            <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 shadow-2xl">
+                <form onSubmit={handleGenerateContent}>
+                    <label htmlFor="ai-prompt" className="block text-sm font-medium text-slate-300 mb-2">
+                        Your Prompt
+                    </label>
+                    <textarea
+                        id="ai-prompt"
+                        rows="6"
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder="e.g., 'A blog post about the top 5 benefits of remote work for small businesses'"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                        disabled={loading || !canGenerate}
+                    />
+                    
+                    {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
+
+                    <div className="mt-6 flex justify-center">
+                        <motion.button
+                            type="submit"
+                            disabled={loading || !canGenerate}
+                            whileHover={{ scale: (loading || !canGenerate) ? 1 : 1.05 }}
+                            whileTap={{ scale: (loading || !canGenerate) ? 1 : 0.95 }}
+                            className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed"
+                        >
+                            {!canGenerate ? (
+                                <>
+                                    <LockClosedIcon className="h-5 w-5" />
+                                    Permission Denied
+                                </>
+                            ) : loading ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Generating...
+                                </>
+                            ) : (
+                                <>
+                                    <PaperAirplaneIcon className="h-5 w-5" />
+                                    Generate Content
+                                </>
+                            )}
+                        </motion.button>
+                    </div>
+                </form>
+            </div>
+        </motion.div>
     );
-  }
-
-  if (error) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex justify-center items-center h-full text-red-400 text-lg"
-      >
-        {error}
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="bg-slate-800/70 p-6 rounded-lg border border-slate-700"
-    >
-      {/* AI Prompt Form */}
-      {role === 'creator' && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <SparklesIcon className="h-5 w-5 text-indigo-400" />
-            Generate AI Content
-          </h2>
-          <form onSubmit={handleGenerate} className="flex flex-col gap-4">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter your prompt (e.g., 'Summarize a marketing campaign for social media')"
-              className="w-full p-3 rounded-md bg-slate-900 text-white border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              rows={4}
-              disabled={aiLoading}
-              aria-label="AI prompt input"
-            />
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              type="submit"
-              disabled={aiLoading || !prompt.trim()}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 flex items-center gap-2"
-              aria-label="Generate AI content"
-            >
-              <BeakerIcon className="h-5 w-5" />
-              {aiLoading ? 'Generating...' : 'Generate'}
-            </motion.button>
-          </form>
-        </div>
-      )}
-
-      {/* AI Lab Table */}
-      <table className="w-full text-sm text-left text-slate-300">
-        <thead className="text-xs text-slate-400 uppercase bg-slate-700/50">
-          <tr>
-            <th scope="col" className="px-4 py-3 md:px-6">Prompt</th>
-            <th scope="col" className="px-4 py-3 md:px-6">Created By</th>
-            <th scope="col" className="px-4 py-3 md:px-6">Date</th>
-            <th scope="col" className="px-4 py-3 md:px-6">Output Preview</th>
-          </tr>
-        </thead>
-        <tbody>
-          <AnimatePresence>
-            {aiItems.map((item) => (
-              <motion.tr
-                key={item.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.2 }}
-                className="border-b border-slate-700 hover:bg-indigo-700/20 cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => console.log('View AI item:', item.id)} // Replace with navigate if needed
-                onKeyDown={(e) => e.key === 'Enter' && console.log('View AI item:', item.id)}
-                aria-label={`View AI item: ${item.prompt}`}
-              >
-                <td className="px-4 py-4 md:px-6 font-semibold text-white">
-                  {item.prompt.slice(0, 50) + (item.prompt.length > 50 ? '...' : '')}
-                </td>
-                <td className="px-4 py-4 md:px-6">{item.createdBy?.name || 'Unknown'}</td>
-                <td className="px-4 py-4 md:px-6">
-                  {item.createdAt?.toDate().toLocaleDateString() || 'N/A'}
-                </td>
-                <td className="px-4 py-4 md:px-6">
-                  {item.output.slice(0, 50) + (item.output.length > 50 ? '...' : '')}
-                </td>
-              </motion.tr>
-            ))}
-          </AnimatePresence>
-        </tbody>
-      </table>
-    </motion.div>
-  );
 };
+
+export default AILab;

@@ -1,151 +1,168 @@
 import React, { useState, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore'; // Import setDoc instead of updateDoc
+import { UserPlusIcon, PencilSquareIcon, CheckBadgeIcon, ShieldCheckIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 
-const Onboarding = ({ setOrgId }) => {
-  const { db, user, navigate } = useContext(AppContext);
-  const [step, setStep] = useState(1);
-  const [orgName, setOrgName] = useState('');
-  const [role, setRole] = useState('creator');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+const Onboarding = ({ setOrgId: setAppOrgId }) => {
+    const { db, user, navigate } = useContext(AppContext);
+    const [step, setStep] = useState(1);
+    const [organizationName, setOrganizationName] = useState('');
+    const [selectedRole, setSelectedRole] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-  const steps = [
-    { id: 1, title: 'Create Your Organization' },
-    { id: 2, title: 'Choose Your Role' },
-  ];
+    const roles = [
+        { name: 'Creator', description: 'Draft content and submit for review.', icon: <PencilSquareIcon className="h-8 w-8 text-indigo-400" /> },
+        { name: 'Editor', description: 'Review and edit content submissions.', icon: <CheckBadgeIcon className="h-8 w-8 text-indigo-400" /> },
+        { name: 'Approver', description: 'Give the final sign-off on content.', icon: <UserPlusIcon className="h-8 w-8 text-indigo-400" /> },
+        { name: 'Admin', description: 'Manage the team, billing, and content.', icon: <ShieldCheckIcon className="h-8 w-8 text-indigo-400" /> },
+    ];
 
-  const handleNext = async () => {
-    if (step === 1 && !orgName.trim()) {
-      setError('Organization name is required');
-      return;
-    }
-    if (step === steps.length) {
-      setLoading(true);
-      try {
-        const orgId = `org_${Date.now()}`; // Simple unique ID; consider UUID in production
-        await setDoc(doc(db, 'users', user.uid), {
-          orgId,
-          role,
-          name: user.displayName || 'Anonymous User',
-          email: user.email || '',
-        });
-        setOrgId(orgId);
-        navigate('/dashboard');
-      } catch (err) {
-        console.error('Onboarding error:', err);
-        setError('Failed to save onboarding data');
-        setLoading(false);
-      }
-      return;
-    }
-    setError(null);
-    setStep(step + 1);
-  };
+    const handleNext = () => {
+        if (organizationName.trim() === '') {
+            setError('Please enter an organization name.');
+            return;
+        }
+        setError('');
+        setStep(2);
+    };
 
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1);
-    setError(null);
-  };
+    const handleFinishOnboarding = async () => {
+        if (!selectedRole) {
+            setError('Please select a role to continue.');
+            return;
+        }
+        setLoading(true);
+        setError('');
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4"
-    >
-      <div className="max-w-md w-full bg-slate-800/70 p-6 rounded-lg border border-slate-700">
-        <h2 className="text-2xl font-bold mb-4">Welcome to ApprovalQ</h2>
-        <div className="flex justify-between mb-6">
-          {steps.map((s) => (
-            <div
-              key={s.id}
-              className={`flex-1 text-center ${step >= s.id ? 'text-indigo-400' : 'text-gray-400'}`}
-            >
-              {s.title}
+        try {
+            const orgId = organizationName.trim().toLowerCase().replace(/\s+/g, '-');
+            const userRef = doc(db, 'users', user.uid);
+            
+            // --- FIX: Use setDoc with { merge: true } ---
+            // This is more robust. It creates the document if it doesn't exist,
+            // or merges the new data if it does, preventing race conditions.
+            await setDoc(userRef, {
+                orgId: orgId,
+                role: selectedRole,
+            }, { merge: true });
+
+            setAppOrgId(orgId); // Update the orgId in the main App state
+            navigate('/dashboard'); // Navigate to the main application
+        } catch (err) {
+            console.error("Error saving user data:", err);
+            setError('Failed to save your information. Please try again.');
+            setLoading(false);
+        }
+    };
+
+    const stepVariants = {
+        hidden: { opacity: 0, x: 50 },
+        visible: { opacity: 1, x: 0 },
+        exit: { opacity: 0, x: -50 },
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 p-4 font-sans">
+            <div className="w-full max-w-xl">
+                {/* Progress Bar */}
+                <div className="mb-8">
+                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <motion.div
+                            className="h-full bg-indigo-500"
+                            initial={{ width: '0%' }}
+                            animate={{ width: step === 1 ? '50%' : '100%' }}
+                            transition={{ duration: 0.5, ease: 'easeInOut' }}
+                        />
+                    </div>
+                </div>
+
+                <AnimatePresence mode="wait">
+                    {step === 1 && (
+                        <motion.div
+                            key="step1"
+                            variants={stepVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            transition={{ duration: 0.5 }}
+                            className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 shadow-2xl"
+                        >
+                            <h1 className="text-4xl font-bold text-white mb-2">Welcome to ApprovalQ</h1>
+                            <p className="text-slate-400 mb-8">Let's start by creating your organization.</p>
+                            
+                            <label htmlFor="organizationName" className="block text-sm font-medium text-slate-300 mb-2">
+                                Organization Name
+                            </label>
+                            <input
+                                type="text"
+                                id="organizationName"
+                                value={organizationName}
+                                onChange={(e) => setOrganizationName(e.target.value)}
+                                placeholder="e.g., Creative Dynamics Inc."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition"
+                            />
+                            
+                            {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+                            
+                            <button
+                                onClick={handleNext}
+                                className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg mt-8 transition-all duration-300 transform hover:scale-105"
+                            >
+                                Next <ArrowRightIcon className="h-5 w-5 ml-2" />
+                            </button>
+                        </motion.div>
+                    )}
+
+                    {step === 2 && (
+                        <motion.div
+                            key="step2"
+                            variants={stepVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            transition={{ duration: 0.5 }}
+                            className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 shadow-2xl"
+                        >
+                            <h2 className="text-3xl font-bold text-white mb-2">What's your role?</h2>
+                            <p className="text-slate-400 mb-8">This will help tailor your experience inside ApprovalQ.</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {roles.map((role) => (
+                                    <button
+                                        key={role.name}
+                                        onClick={() => setSelectedRole(role.name)}
+                                        className={`p-6 text-left border rounded-xl transition-all duration-300 ${
+                                            selectedRole === role.name 
+                                                ? 'bg-indigo-600 border-indigo-500 shadow-lg' 
+                                                : 'bg-slate-800 border-slate-700 hover:border-slate-500 hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        <div className="flex items-center mb-2">
+                                            {role.icon}
+                                            <h3 className="text-xl font-bold text-white ml-3">{role.name}</h3>
+                                        </div>
+                                        <p className="text-slate-300">{role.description}</p>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
+
+                            <button
+                                onClick={handleFinishOnboarding}
+                                disabled={loading}
+                                className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-lg mt-8 transition-all duration-300 transform hover:scale-105 disabled:bg-slate-600 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Finalizing...' : 'Finish Setup'}
+                            </button>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-          ))}
         </div>
-        <AnimatePresence mode="wait">
-          {step === 1 && (
-            <motion.div
-              key="step1"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <label className="block text-sm font-medium mb-2">Organization Name</label>
-              <input
-                type="text"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                className="w-full p-3 rounded-md bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="e.g., Creative Agency"
-                aria-label="Organization name"
-              />
-            </motion.div>
-          )}
-          {step === 2 && (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <label className="block text-sm font-medium mb-2">Your Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full p-3 rounded-md bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                aria-label="User role"
-              >
-                <option value="creator">Creator</option>
-                <option value="editor">Editor</option>
-                <option value="approver">Approver</option>
-                <option value="Admin">Admin</option>
-              </select>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {error && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-red-400 mt-4"
-          >
-            {error}
-          </motion.p>
-        )}
-        <div className="flex justify-between mt-6">
-          {step > 1 && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleBack}
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              aria-label="Back"
-            >
-              Back
-            </motion.button>
-          )}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleNext}
-            disabled={loading}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            aria-label={step === steps.length ? 'Complete Onboarding' : 'Next'}
-          >
-            {loading ? 'Saving...' : step === steps.length ? 'Complete' : 'Next'}
-          </motion.button>
-        </div>
-      </div>
-    </motion.div>
-  );
+    );
 };
 
 export default Onboarding;
