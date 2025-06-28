@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import { OpenAI } from 'openai';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorBoundary } from 'react-error-boundary';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { auth, db, openai } from './firebaseConfig';
 import { AppContext } from './context/AppContext';
 import AppLayout from './components/AppLayout';
-import './index.css'; // Tailwind CSS import
+import './index.css';
 
-// --- FIX 1: Lazy-loaded components ---
-// Added imports for ProfileSettings, TeamManagement, and Billing to resolve 'not defined' errors.
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
 const CreativeInsights = lazy(() => import('./components/CreativeInsights'));
@@ -21,45 +19,42 @@ const InviteUserForm = lazy(() => import('./components/InviteUserForm'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 const TeamManagement = lazy(() => import('./components/TeamManagement'));
 const Billing = lazy(() => import('./components/Billing'));
+const ContentDetailView = lazy(() => import('./components/ContentDetailView'));
 
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+const ErrorFallback = ({ error }) => {
+  const { theme } = useTheme();
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={`flex justify-center items-center h-screen text-red-400 ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100'}`}
+    >
+      <div className="text-center">
+        <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+        <p>{error.message}</p>
+      </div>
+    </motion.div>
+  );
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const LoadingSpinner = () => {
+  const { theme } = useTheme();
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className={`flex flex-col justify-center items-center h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}
+    >
+      <svg className="animate-spin h-12 w-12 text-indigo-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <p className="text-lg font-medium">Loading ApprovalQ...</p>
+    </motion.div>
+  );
+};
 
-// OpenAI configuration
-const openai = new OpenAI({
-  apiKey: process.env.REACT_APP_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true, // Note: For client-side use; consider server-side for production
-});
-
-// Error boundary fallback
-const ErrorFallback = ({ error }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    className="flex justify-center items-center h-screen bg-gray-900 text-red-400 text-lg"
-  >
-    <div className="text-center">
-      <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
-      <p>{error.message}</p>
-    </div>
-  </motion.div>
-);
-
-// --- FIX 2: App Content Component ---
-// All state, hooks, and routing logic have been moved into this new component.
-// This ensures that `useNavigate` is called within a component that is a child of `<Router>`, fixing a critical hook error.
 function AppContent() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -67,170 +62,94 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Monitor authentication state
   useEffect(() => {
+    console.log("Setting up auth listener...");
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      console.log("Auth state changed. User:", currentUser);
       if (currentUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUser(currentUser);
-            setRole(userData.role || 'user');
-            setOrgId(userData.orgId || null);
-          } else {
-            // New user, not yet onboarded
-            setUser(currentUser);
-            setRole('user'); // Default role
-            setOrgId(null);
-          }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          setUser(null);
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUser(currentUser);
+          setRole(userData.role || null);
+          setOrgId(userData.orgId || null);
+          console.log("User doc found. Role:", userData.role, "OrgID:", userData.orgId);
+        } else {
+          setUser(currentUser);
           setRole(null);
           setOrgId(null);
+          console.log("New user, no user doc yet.");
         }
       } else {
         setUser(null);
         setRole(null);
         setOrgId(null);
+        console.log("User is logged out.");
       }
       setLoading(false);
+      console.log("Loading complete.");
     });
     return () => unsubscribe();
   }, []);
 
-  // Memoize context value
   const contextValue = useMemo(
     () => ({ db, auth, openai, user, role, orgId, navigate }),
     [user, role, orgId, navigate]
   );
 
-  // Protected route component
   const ProtectedRoute = ({ children, allowedRoles }) => {
-    if (loading) {
-      return (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex justify-center items-center h-screen bg-gray-900 text-white"
-        >
-          Loading...
-        </motion.div>
-      );
-    }
     if (!user) return <Navigate to="/landing" replace />;
     if (!orgId && window.location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
     if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/dashboard" replace />;
-    
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-      >
-        {children}
-      </motion.div>
-    );
+    return children;
   };
+
+  if (loading) return <LoadingSpinner />;
 
   return (
     <AppContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-gray-900 text-white font-sans">
-        <AnimatePresence mode="wait">
-          <Suspense
-            fallback={
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-center items-center h-screen bg-gray-900 text-white"
-              >
-                Loading...
-              </motion.div>
-            }
-          >
-            <Routes>
-              {/* --- FIX: Added root path redirect --- */}
-              {/* This ensures visiting the base URL always shows the landing page first. */}
-              <Route path="/" element={<Navigate to="/landing" replace />} />
-
-              {/* Landing Page */}
-              <Route
-                path="/landing"
-                element={
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <LandingPage />
-                  </motion.div>
-                }
-              />
-              {/* Onboarding */}
-              <Route
-                path="/onboarding"
-                element={
-                  user ? <Onboarding setOrgId={setOrgId} /> : <Navigate to="/landing" replace />
-                }
-              />
-              {/* Main App with Layout */}
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <AppLayout>
-                      <Routes>
-                        <Route path="/dashboard" element={<CreativeInsights />} />
-                        <Route path="/all-content" element={<AllContent />} />
-                        <Route path="/ai-lab" element={<AILab />} />
-                        <Route path="/profile" element={<ProfileSettings />} />
-                        <Route path="/settings" element={<ProfileSettings />} />
-                        <Route
-                          path="/team"
-                          element={
-                            <ProtectedRoute allowedRoles={['Admin']}>
-                              <TeamManagement />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route path="/billing" element={
-                            <ProtectedRoute allowedRoles={['Admin']}>
-                                <Billing />
-                            </ProtectedRoute>
-                        } />
-                        <Route
-                          path="/invite"
-                          element={
-                            <ProtectedRoute allowedRoles={['Admin']}>
-                              <InviteUserForm />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                      </Routes>
-                    </AppLayout>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </Suspense>
-        </AnimatePresence>
-      </div>
+      <AnimatePresence mode="wait">
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/landing" replace />} />
+            <Route path="/landing" element={<LandingPage />} />
+            <Route path="/onboarding" element={user ? <Onboarding setOrgId={setOrgId} /> : <Navigate to="/landing" replace />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Routes>
+                      <Route path="/dashboard" element={<CreativeInsights />} />
+                      <Route path="/all-content" element={<AllContent />} />
+                      <Route path="/ai-lab" element={<AILab />} />
+                      <Route path="/profile" element={<ProfileSettings />} />
+                      <Route path="/settings" element={<ProfileSettings />} />
+                      <Route path="/team" element={<ProtectedRoute allowedRoles={['Admin']}><TeamManagement /></ProtectedRoute>} />
+                      <Route path="/billing" element={<ProtectedRoute allowedRoles={['Admin']}><Billing /></ProtectedRoute>} />
+                      <Route path="/invite" element={<ProtectedRoute allowedRoles={['Admin']}><InviteUserForm /></ProtectedRoute>} />
+                      <Route path="/content/:contentId" element={<ContentDetailView />} />
+                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    </Routes>
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Suspense>
+      </AnimatePresence>
     </AppContext.Provider>
   );
 }
 
-
-// The main App component now wraps the app in the Router and ErrorBoundary.
 function App() {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Router>
-        <AppContent />
-      </Router>
+      <ThemeProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
