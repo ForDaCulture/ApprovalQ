@@ -2,49 +2,62 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check a user's role within their organization
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
-    // Users Collection:
-    // Users can read their own profile.
-    // Users can update their own 'name' and 'email'.
-    // Admins can update the 'role' of any user within their own organization.
+    function isSameOrg(resourceOrgId) {
+      return request.auth != null && resourceOrgId == getUserData(request.auth.uid).orgId;
+    }
+
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == userId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'email']);
-      
-      // Admin role update logic
+      allow create: if request.auth != null && request.resource.data.orgId != null;
+      allow update: if request.auth != null && request.auth.uid == userId && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'email']);
       allow update: if request.auth != null && 
-                     getUserRole(request.auth.uid) == 'Admin' &&
-                     resource.data.orgId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId &&
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']);
+                    getUserData(request.auth.uid).role == 'Admin' && 
+                    isSameOrg(resource.data.orgId) && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']);
     }
 
-    // Billing Collection:
-    // Only Admins can view or modify billing information for their organization.
     match /billing/{docId} {
       allow read, write: if request.auth != null && 
-                          getUserRole(request.auth.uid) == 'Admin' &&
-                          resource.data.orgId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+                         getUserData(request.auth.uid).role == 'Admin' && 
+                         isSameOrg(resource.data.orgId);
     }
 
-    // AI Lab Collection:
-    // Authenticated users who are part of an organization can create AI content.
-    // Users can only read AI content that belongs to their organization.
     match /aiLab/{aiLabId} {
       allow create: if request.auth != null && request.resource.data.orgId != null;
-      allow read: if request.auth != null && 
-                   resource.data.orgId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+      allow read: if request.auth != null && isSameOrg(resource.data.orgId);
+      allow update, delete: if false;
     }
-    
-    // Content Collection (Assuming similar logic to aiLab)
+
     match /content/{contentId} {
-       allow create: if request.auth != null && request.resource.data.orgId != null;
-       allow read, update, delete: if request.auth != null && 
-                   resource.data.orgId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.orgId;
+      allow create: if request.auth != null && 
+                    request.resource.data.orgId != null && 
+                    (getUserData(request.auth.uid).role == 'Content Creator' || getUserData(request.auth.uid).role == 'Admin');
+      allow read: if request.auth != null && isSameOrg(resource.data.orgId);
+      allow update: if request.auth != null && isSameOrg(resource.data.orgId) && (
+                    (getUserData(request.auth.uid).role == 'Editor' && resource.data.status == 'Draft') ||
+                    (getUserData(request.auth.uid).role == 'Reviewer' && resource.data.status == 'Under Review' && request.resource.data.status == 'Changes Requested') ||
+                    (getUserData(request.auth.uid).role == 'Approver' && resource.data.status == 'Under Review' && request.resource.data.status == 'Approved')
+                  );
+      allow delete: if request.auth != null && 
+                    getUserData(request.auth.uid).role == 'Admin' && 
+                    isSameOrg(resource.data.orgId);
+    }
+
+    match /content/{contentId}/comments/{commentId} {
+      allow read, create: if request.auth != null && isSameOrg(get(/databases/$(database)/documents/content/$(contentId)).data.orgId);
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && isSameOrg(resource.data.orgId);
+      allow create: if request.auth != null && request.resource.data.orgId != null && 
+                    (getUserData(request.auth.uid).role == 'Admin' || getUserData(request.auth.uid).role == 'Content Creator');
+      allow update, delete: if false;
     }
   }
 }

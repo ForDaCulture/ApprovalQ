@@ -3,12 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ErrorBoundary } from 'react-error-boundary';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { auth, db, openai } from './firebaseConfig';
 import { AppContext } from './context/AppContext';
 import AppLayout from './components/AppLayout';
 import './index.css';
+import { ErrorBoundary } from 'react-error-boundary';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
@@ -20,6 +20,7 @@ const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 const TeamManagement = lazy(() => import('./components/TeamManagement'));
 const Billing = lazy(() => import('./components/Billing'));
 const ContentDetailView = lazy(() => import('./components/ContentDetailView'));
+const Notifications = lazy(() => import('./components/Notifications')); // Added Notifications
 
 const ErrorFallback = ({ error }) => {
   const { theme } = useTheme();
@@ -63,9 +64,7 @@ function AppContent() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log("Setting up auth listener...");
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log("Auth state changed. User:", currentUser);
       if (currentUser) {
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (userDoc.exists()) {
@@ -73,21 +72,17 @@ function AppContent() {
           setUser(currentUser);
           setRole(userData.role || null);
           setOrgId(userData.orgId || null);
-          console.log("User doc found. Role:", userData.role, "OrgID:", userData.orgId);
         } else {
           setUser(currentUser);
           setRole(null);
           setOrgId(null);
-          console.log("New user, no user doc yet.");
         }
       } else {
         setUser(null);
         setRole(null);
         setOrgId(null);
-        console.log("User is logged out.");
       }
       setLoading(false);
-      console.log("Loading complete.");
     });
     return () => unsubscribe();
   }, []);
@@ -128,6 +123,7 @@ function AppContent() {
                       <Route path="/team" element={<ProtectedRoute allowedRoles={['Admin']}><TeamManagement /></ProtectedRoute>} />
                       <Route path="/billing" element={<ProtectedRoute allowedRoles={['Admin']}><Billing /></ProtectedRoute>} />
                       <Route path="/invite" element={<ProtectedRoute allowedRoles={['Admin']}><InviteUserForm /></ProtectedRoute>} />
+                      <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} /> {/* Added Notifications route */}
                       <Route path="/content/:contentId" element={<ContentDetailView />} />
                       <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
@@ -144,13 +140,13 @@ function AppContent() {
 
 function App() {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <ThemeProvider>
+    <ThemeProvider>
+      <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Router>
           <AppContent />
         </Router>
-      </ThemeProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
 
